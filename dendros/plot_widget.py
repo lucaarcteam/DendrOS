@@ -4,6 +4,7 @@ import numpy as np
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from matplotlib.ticker import FuncFormatter
+from matplotlib.patches import FancyBboxPatch
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QAction, QIcon, QPixmap, QPainter, QFont, QPen, QColor
 from PyQt6.QtWidgets import QVBoxLayout, QWidget, QToolBar, QStyle
@@ -90,6 +91,9 @@ class SeriesPlotWidget(QWidget):
         self._track_vline = None
         self._track_label = None
         self._show_concordance = False
+        self._show_indices = False
+        self._show_pointer_years = False
+        self._pointer_years: dict[int, str] = {}
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -277,6 +281,15 @@ class SeriesPlotWidget(QWidget):
     def set_log_scale(self, enabled: bool):
         self._log_scale = enabled
 
+    def set_show_indices(self, enabled: bool):
+        self._show_indices = enabled
+
+    def set_show_pointer_years(self, enabled: bool):
+        self._show_pointer_years = enabled
+
+    def set_pointer_years_data(self, data: dict[int, str]):
+        self._pointer_years = data
+
     def set_show_concordance(self, enabled: bool):
         self._show_concordance = enabled
 
@@ -313,6 +326,24 @@ class SeriesPlotWidget(QWidget):
                     color="#e0e0e0", zorder=0
                 )
 
+    def _draw_pointer_years(self):
+        if not self._show_pointer_years or not self._pointer_years:
+            return
+        ymin, ymax = self.axes.get_ylim()
+        for year, sign in self._pointer_years.items():
+            color = "#2ecc71" if sign == "+" else "#e74c3c"
+            alpha = 0.15 if sign == "+" else 0.15
+            self.axes.axvspan(
+                year - 0.5, year + 0.5,
+                color=color, alpha=alpha, zorder=0
+            )
+            self.axes.annotate(
+                sign, xy=(year, ymax),
+                xytext=(0, -3), textcoords="offset points",
+                ha="center", va="top", fontsize=6,
+                color=color, fontweight="bold",
+            )
+
     def plot_all(self, info_labels: Optional[set[str]] = None, reset_zoom: bool = False):
         if not reset_zoom:
             xlim = self.axes.get_xlim()
@@ -322,13 +353,14 @@ class SeriesPlotWidget(QWidget):
         self._track_vline = None
         self._track_label = None
         self._draw_concordance()
+        self._draw_pointer_years()
         for i, (name, (years, values)) in enumerate(self._series_data.items()):
             color = self._colors[i % len(self._colors)]
             self.axes.plot(years, values, label=name, color=color, linewidth=0.8)
         if self._series_data:
             self.axes.legend(fontsize=8)
             self.axes.set_xlabel("Year")
-            self.axes.set_ylabel("Ring width")
+            self.axes.set_ylabel("Index" if self._show_indices else "Ring width")
         self.axes.set_yscale("log" if self._log_scale else "linear")
         self._clean_xaxis()
         if reset_zoom:

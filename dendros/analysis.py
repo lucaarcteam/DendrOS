@@ -1,5 +1,6 @@
 import numpy as np
 from typing import Optional
+from scipy import stats as _stats
 from .models.series import Series
 
 
@@ -45,6 +46,16 @@ def tvalue(r: float, n: int) -> Optional[float]:
     if n < 3 or abs(r) >= 1.0:
         return None
     return r * np.sqrt((n - 2) / (1 - r * r))
+
+
+def pvalue_from_t(t: float, n: int) -> Optional[float]:
+    """Two-tailed p-value from t-value and overlap n (df = n-2)."""
+    if t is None or n < 3:
+        return None
+    df = n - 2
+    if df < 1:
+        return None
+    return float(2 * (1 - _stats.t.cdf(abs(t), df)))
 
 
 def tvalue_bp(r: float, n: int) -> Optional[float]:
@@ -121,6 +132,7 @@ def sliding_correlation(
             continue
         r = float(np.corrcoef(va, vb)[0, 1])
         t = t_func(r, n)
+        p = pvalue_from_t(t, n)
         da = np.diff(va)
         db = np.diff(vb)
         same = np.sum((da > 0) & (db > 0)) + np.sum((da < 0) & (db < 0))
@@ -130,6 +142,7 @@ def sliding_correlation(
             "overlap": n,
             "r": r,
             "t": t,
+            "p": p,
             "glk": glk,
         })
 
@@ -163,3 +176,44 @@ def build_master(series_list: list[Series], min_overlap: int = 2) -> Optional[Se
         years=np.array(years, dtype=int),
         values=np.array(values, dtype=float),
     )
+
+
+def compute_pointer_years(
+    series_list: list[Series],
+    threshold: float = 75.0,
+    min_series: int = 3,
+) -> dict[int, str]:
+    """Identify pointer years (Weiser years).
+
+    For each year present in at least `min_series` series, compute the
+    percentage of series that show a positive vs negative year-to-year change.
+    If either percentage >= threshold, mark the year as "+" or "-".
+
+    Returns dict mapping year -> sign ("+" or "-").
+    """
+    if not series_list:
+        return {}
+
+    year_changes: dict[int, list[float]] = {}
+    for s in series_list:
+        if len(s.values) < 2:
+            continue
+        diffs = np.diff(s.values)
+        changes = np.where(diffs > 0, 1.0, -1.0)
+        for y, c in zip(s.years[1:], changes):
+            year_changes.setdefault(int(y), []).append(c)
+
+    pointer = {}
+    for y, changes in year_changes.items():
+        if len(changes) < min_series:
+            continue
+        n_pos = sum(1 for c in changes if c > 0)
+        n_neg = sum(1 for c in changes if c < 0)
+        pct_pos = n_pos / len(changes) * 100
+        pct_neg = n_neg / len(changes) * 100
+        if pct_pos >= threshold:
+            pointer[y] = "+"
+        elif pct_neg >= threshold:
+            pointer[y] = "-"
+
+    return pointer

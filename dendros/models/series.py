@@ -11,12 +11,19 @@ class Series:
     filename: str = ""
     species: str = ""
     notes: str = ""
+    indices: Optional[np.ndarray] = None
+    detrend_method: str = ""
 
     def __post_init__(self):
         if isinstance(self.years, list):
             self.years = np.array(self.years)
         if isinstance(self.values, list):
             self.values = np.array(self.values)
+        if isinstance(self.indices, list):
+            self.indices = np.array(self.indices)
+
+    def has_indices(self) -> bool:
+        return self.indices is not None and len(self.indices) > 0
 
     @property
     def start_year(self) -> int:

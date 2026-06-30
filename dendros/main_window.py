@@ -15,7 +15,8 @@ from .models.series import Series
 from .data_import import read_rwl, read_txt_single, read_fh
 from .plot_widget import SeriesPlotWidget
 import numpy as np
-from .dialogs import CrossDateDialog, SeriesInfoDialog, BuildMasterDialog
+from .dialogs import CrossDateDialog, SeriesInfoDialog, BuildMasterDialog, DetrendDialog
+from .analysis import compute_pointer_years
 
 
 # Column indices in the series tree
@@ -72,6 +73,9 @@ class MainWindow(QMainWindow):
         self.act_master = QAction("Build Master...", self)
         self.act_master.triggered.connect(self._on_build_master)
 
+        self.act_detrend = QAction("Detrend / Index...", self)
+        self.act_detrend.triggered.connect(self._on_detrend)
+
         self.act_series_info = QAction("Series Info...", self)
         self.act_series_info.triggered.connect(self._on_series_info)
 
@@ -79,9 +83,17 @@ class MainWindow(QMainWindow):
         self.act_log_scale.setCheckable(True)
         self.act_log_scale.triggered.connect(self._on_toggle_log)
 
+        self.act_show_indices = QAction("Show Indices", self)
+        self.act_show_indices.setCheckable(True)
+        self.act_show_indices.triggered.connect(self._on_toggle_indices)
+
         self.act_concordance = QAction("Concordance Bands", self)
         self.act_concordance.setCheckable(True)
         self.act_concordance.triggered.connect(self._on_toggle_concordance)
+
+        self.act_pointer_years = QAction("Show Pointer Years", self)
+        self.act_pointer_years.setCheckable(True)
+        self.act_pointer_years.triggered.connect(self._on_toggle_pointer_years)
 
     def _setup_menus(self):
         menubar = self.menuBar()
@@ -101,11 +113,15 @@ class MainWindow(QMainWindow):
         analysis_menu.addAction(self.act_crossdate)
         analysis_menu.addAction(self.act_master)
         analysis_menu.addSeparator()
+        analysis_menu.addAction(self.act_detrend)
+        analysis_menu.addSeparator()
         analysis_menu.addAction(self.act_series_info)
 
         view_menu = menubar.addMenu("View")
         view_menu.addAction(self.act_log_scale)
+        view_menu.addAction(self.act_show_indices)
         view_menu.addAction(self.act_concordance)
+        view_menu.addAction(self.act_pointer_years)
         menubar.addMenu("Help")
 
     def _setup_toolbar(self):
@@ -213,10 +229,12 @@ class MainWindow(QMainWindow):
 
     def _save_project(self, path: str):
         data = {
-            "version": 1,
+            "version": 2,
             "name": self.project.name,
             "log_scale": self.act_log_scale.isChecked(),
+            "show_indices": self.act_show_indices.isChecked(),
             "concordance": self.act_concordance.isChecked(),
+            "pointer_years": self.act_pointer_years.isChecked(),
             "sort_column": self._sort_column,
             "sort_order": self._sort_order.value,
             "tree_states": self._current_tree_state(),
@@ -228,6 +246,8 @@ class MainWindow(QMainWindow):
                     "notes": s.notes,
                     "years": s.years.tolist(),
                     "values": s.values.tolist(),
+                    "indices": s.indices.tolist() if s.has_indices() else None,
+                    "detrend_method": s.detrend_method,
                 }
                 for s in self.project.series_list
             ],
@@ -244,6 +264,7 @@ class MainWindow(QMainWindow):
 
         for sd in data.get("series", []):
             import numpy as np
+            indices_raw = sd.get("indices")
             s = Series(
                 name=sd["name"],
                 filename=sd.get("filename", ""),
@@ -251,6 +272,8 @@ class MainWindow(QMainWindow):
                 notes=sd.get("notes", ""),
                 years=np.array(sd["years"], dtype=int),
                 values=np.array(sd["values"], dtype=float),
+                indices=np.array(indices_raw, dtype=float) if indices_raw is not None else None,
+                detrend_method=sd.get("detrend_method", ""),
             )
             self.project.add_series(s)
             self._add_series_to_tree(s)
@@ -263,9 +286,14 @@ class MainWindow(QMainWindow):
         log_scale = data.get("log_scale", False)
         self.act_log_scale.setChecked(log_scale)
         self.plot_widget.set_log_scale(log_scale)
+        show_indices = data.get("show_indices", False)
+        self.act_show_indices.setChecked(show_indices)
         concordance = data.get("concordance", False)
         self.act_concordance.setChecked(concordance)
         self.plot_widget.set_show_concordance(concordance)
+        pointer_years = data.get("pointer_years", False)
+        self.act_pointer_years.setChecked(pointer_years)
+        self.plot_widget.set_show_pointer_years(pointer_years)
 
         self._update_plot(reset_zoom=True)
 
@@ -328,6 +356,14 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Warning", "No series loaded.")
             return
         dlg = BuildMasterDialog(self.project, self)
+        if dlg.exec():
+            self._refresh_project_ui()
+
+    def _on_detrend(self):
+        if not self.project.series_list:
+            QMessageBox.warning(self, "Warning", "No series loaded.")
+            return
+        dlg = DetrendDialog(self.project, self)
         if dlg.exec():
             self._refresh_project_ui()
 
@@ -407,8 +443,14 @@ class MainWindow(QMainWindow):
         self.plot_widget.set_log_scale(self.act_log_scale.isChecked())
         self._update_plot()
 
+    def _on_toggle_indices(self):
+        self._update_plot()
+
     def _on_toggle_concordance(self):
         self.plot_widget.set_show_concordance(self.act_concordance.isChecked())
+        self._update_plot()
+
+    def _on_toggle_pointer_years(self):
         self._update_plot()
 
     def _on_tree_double_clicked(self, item, column):
@@ -577,6 +619,8 @@ class MainWindow(QMainWindow):
 
     def _update_plot(self, reset_zoom: bool = False):
         self.plot_widget.clear_series()
+        use_indices = self.act_show_indices.isChecked()
+        self.plot_widget.set_show_indices(use_indices)
         info_names = set()
         for i in range(self.series_tree.topLevelItemCount()):
             item = self.series_tree.topLevelItem(i)
@@ -584,7 +628,34 @@ class MainWindow(QMainWindow):
                 name = item.data(COL_NAME, Qt.ItemDataRole.UserRole)
                 series = self.project.get_series(name)
                 if series is not None:
-                    self.plot_widget.add_series(series.name, series.years, series.values)
+                    if use_indices and series.has_indices():
+                        self.plot_widget.add_series(
+                            series.name, series.years, series.indices
+                        )
+                    else:
+                        self.plot_widget.add_series(
+                            series.name, series.years, series.values
+                        )
                 if item.checkState(COL_INFO) == Qt.CheckState.Checked:
                     info_names.add(name)
+
+        show_py = self.act_pointer_years.isChecked()
+        self.plot_widget.set_show_pointer_years(show_py)
+        if show_py and self.project.series_list:
+            visible = []
+            for i in range(self.series_tree.topLevelItemCount()):
+                item = self.series_tree.topLevelItem(i)
+                if item.checkState(COL_VIEW) == Qt.CheckState.Checked:
+                    name = item.data(COL_NAME, Qt.ItemDataRole.UserRole)
+                    s = self.project.get_series(name)
+                    if s:
+                        visible.append(s)
+            if len(visible) >= 2:
+                py_data = compute_pointer_years(visible, threshold=75.0, min_series=2)
+                self.plot_widget.set_pointer_years_data(py_data)
+            else:
+                self.plot_widget.set_pointer_years_data({})
+        else:
+            self.plot_widget.set_pointer_years_data({})
+
         self.plot_widget.plot_all(info_labels=info_names, reset_zoom=reset_zoom)
