@@ -2,7 +2,7 @@
 
 **Dendrochronology Software** — cross-platform (Windows/Linux).
 
-DendrOS is an open‑source application for dendrochronological analysis and cross‑dating of tree‑ring width series. It provides a modern graphical interface (inspired by PAST4) for managing, visualizing, and statistically comparing dendro data.
+DendrOS is an open‑source application for dendrochronological analysis and cross‑dating of tree‑ring width series. It provides a modern graphical interface for managing, visualizing, and statistically comparing dendro data.
 
 Developed in scientific collaboration with:
 - **Mauro Bernabei** — CNR‑IBE (Institute of BioEconomy, National Research Council of Italy)
