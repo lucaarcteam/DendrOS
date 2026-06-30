@@ -1,0 +1,41 @@
+HEADER:
+DataFormat=Tree
+Length=78
+DateBegin=-77
+Unit=1/100 mm
+KeyCode=SGC1a
+Project=asse 1
+Location=chiesa san giuliano di caderzone
+GlobalMathCommentCount=0
+ImageCount=0
+CommentCount=0
+BibliographyCount=0
+Species=LADE
+DATA:Tree
+   138    85   138   159   199   258   241   206   245   281
+   228   170   198   231   149    98    83   100   121    83
+    90    51    31    72    95    93   114    86    85   102
+   100   100   142   131   112    56   106    85    63    71
+    80    83   146   115   130   188   211    94   116    70
+   118    85    92   132   142   147    97   100    34    81
+    85    90   113    92    95    98    63    40    77    48
+    52    44    64    72    67    46    49    74     0     0
+HEADER:
+DataFormat=Tree
+Length=76
+DateBegin=-75
+Unit=1/100 mm
+KeyCode=SGC1b
+GlobalMathCommentCount=0
+ImageCount=0
+CommentCount=0
+BibliographyCount=0
+DATA:Tree
+   218   182   180   229   247   186   289   313   205   120
+   253   233   157   102    88    97   122   103    77    59
+    29    63    86    75   113    74    62    94   117    98
+   107    79    94    59    89    86    70    71    71    82
+   121    87   125   109   138    72    81    63    93    83
+    98   128   107    96    71    65    48    71    85    90
+    98    93    81    96    53    53    75    53    57    52
+    53    54    58    38    40    52     0     0     0     0
